@@ -6,6 +6,12 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: fuzzy_catalog
+    healthcheck:
+      test: pg_isready
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
   web:
     build:
       context: .
@@ -16,7 +22,10 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
     env_file: .env.docker
 volumes:
   postgres_data:
