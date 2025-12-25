@@ -13,20 +13,32 @@ defmodule FuzzyCatalog.ImportExport.Exporter do
 
   @supported_formats ["json", "csv"]
 
+  require Logger
+
   @doc """
   Performs an export job asynchronously.
   """
   def perform_export(%Job{} = job) do
+    Logger.info("Starting export for job ##{job.id}")
+
     case update_job_status(job, "processing") do
       {:ok, job} ->
         try do
-          export_data(job)
+          result = export_data(job)
+          Logger.info("Export completed for job ##{job.id}: #{inspect(result)}")
+          result
         rescue
           error ->
+            Logger.error("Export failed for job ##{job.id}: #{Exception.message(error)}")
+            Logger.error("Stacktrace: #{Exception.format_stacktrace(__STACKTRACE__)}")
             ImportExport.fail_job(job, "Export failed: #{Exception.message(error)}")
         end
 
-      {:error, _changeset} ->
+      {:error, changeset} ->
+        Logger.error(
+          "Failed to update job status for job ##{job.id}: #{inspect(changeset.errors)}"
+        )
+
         {:error, "Failed to update job status"}
     end
   end
@@ -34,30 +46,38 @@ defmodule FuzzyCatalog.ImportExport.Exporter do
   defp export_data(%Job{} = job) do
     filters = job.filters || %{}
     format = Map.get(filters, "format", "json")
+    # Handle empty string format
+    format = if format == "", do: "json", else: format
+
+    Logger.info("Export format: #{format}, filters: #{inspect(filters)}")
 
     unless format in @supported_formats do
+      Logger.error("Unsupported format: #{format}")
       ImportExport.fail_job(job, "Unsupported format: #{format}")
-    end
+      {:error, "Unsupported format"}
+    else
+      # Get filtered data
+      query_result = build_export_query(filters)
+      collection_items = Repo.all(query_result.query)
+      total_items = length(collection_items)
 
-    # Get filtered data
-    query_result = build_export_query(filters)
-    collection_items = Repo.all(query_result.query)
-    total_items = length(collection_items)
+      Logger.info("Found #{total_items} collection items to export")
 
-    # Update job with total count
-    ImportExport.update_job_progress(job, %{
-      total_items: total_items,
-      processed_items: 0,
-      progress: 0
-    })
+      # Update job with total count
+      ImportExport.update_job_progress(job, %{
+        total_items: total_items,
+        processed_items: 0,
+        progress: 0
+      })
 
-    # Process data in chunks for large exports
-    chunk_size = 100
-    chunks = Enum.chunk_every(collection_items, chunk_size)
+      # Process data in chunks for large exports
+      chunk_size = 100
+      chunks = Enum.chunk_every(collection_items, chunk_size)
 
-    case format do
-      "json" -> export_to_json(job, chunks, total_items)
-      "csv" -> export_to_csv(job, chunks, total_items)
+      case format do
+        "json" -> export_to_json(job, chunks, total_items)
+        "csv" -> export_to_csv(job, chunks, total_items)
+      end
     end
   end
 
@@ -201,7 +221,7 @@ defmodule FuzzyCatalog.ImportExport.Exporter do
             end
 
             new_processed = processed_count + length(chunk)
-            progress = round(new_processed / total_items * 100)
+            progress = if total_items > 0, do: round(new_processed / total_items * 100), else: 100
 
             ImportExport.update_job_progress(job, %{
               processed_items: new_processed,
@@ -289,7 +309,7 @@ defmodule FuzzyCatalog.ImportExport.Exporter do
             IO.write(file, Enum.join(csv_rows, "\n") <> "\n")
 
             new_processed = processed_count + length(chunk)
-            progress = round(new_processed / total_items * 100)
+            progress = if total_items > 0, do: round(new_processed / total_items * 100), else: 100
 
             ImportExport.update_job_progress(job, %{
               processed_items: new_processed,

@@ -62,7 +62,7 @@
                     </div>
                     <span class="text-sm font-medium text-gray-700">{@job.progress || 0}%</span>
                   </div>
-                  <%= if @job.processed_items and @job.total_items do %>
+                  <%= if not is_nil(@job.processed_items) and not is_nil(@job.total_items) do %>
                     <p class="mt-1 text-xs text-gray-500">
                       {@job.processed_items} of {@job.total_items} items processed
                     </p>
@@ -110,7 +110,7 @@
                 </dd>
               </div>
             <% end %>
-            <%= if @job.filters and map_size(@job.filters) > 0 do %>
+            <%= if not is_nil(@job.filters) and map_size(@job.filters) > 0 do %>
               <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                 <dt class="text-sm font-medium text-gray-500">Filters Applied</dt>
                 <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">

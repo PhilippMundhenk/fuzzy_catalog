@@ -95,7 +95,7 @@ defmodule FuzzyCatalog.ImportExport do
   """
   def create_export_job(%User{} = user, attrs \\ %{}) do
     %Job{}
-    |> Job.export_changeset(Map.put(attrs, :user_id, user.id))
+    |> Job.export_changeset(Map.put(attrs, "user_id", user.id))
     |> Repo.insert()
   end
 
@@ -113,7 +113,7 @@ defmodule FuzzyCatalog.ImportExport do
   """
   def create_import_job(%User{} = user, attrs \\ %{}) do
     %Job{}
-    |> Job.import_changeset(Map.put(attrs, :user_id, user.id))
+    |> Job.import_changeset(Map.put(attrs, "user_id", user.id))
     |> Repo.insert()
   end
 

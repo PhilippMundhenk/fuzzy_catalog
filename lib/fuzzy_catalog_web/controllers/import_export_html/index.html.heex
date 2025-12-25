@@ -100,7 +100,7 @@
                               max="100"
                             >
                             </progress>
-                            <%= if job.processed_items and job.total_items do %>
+                            <%= if not is_nil(job.processed_items) and not is_nil(job.total_items) do %>
                               <p class="text-xs text-base-content/50 mt-1">
                                 {job.processed_items} of {job.total_items} items processed
                               </p>

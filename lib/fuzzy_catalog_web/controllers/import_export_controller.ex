@@ -3,7 +3,6 @@ defmodule FuzzyCatalogWeb.ImportExportController do
 
   alias FuzzyCatalog.ImportExport
   alias FuzzyCatalog.ImportExport.{Job, Exporter}
-  alias FuzzyCatalog.Storage
 
   def index(conn, _params) do
     current_user = conn.assigns.current_scope.user
@@ -20,10 +19,14 @@ defmodule FuzzyCatalogWeb.ImportExportController do
   end
 
   def create_export(conn, %{"job" => job_params}) do
+    require Logger
     current_user = conn.assigns.current_scope.user
+
+    Logger.info("Creating export job with params: #{inspect(job_params)}")
 
     case ImportExport.create_export_job(current_user, job_params) do
       {:ok, job} ->
+        Logger.info("Export job created successfully, spawning export process for job ##{job.id}")
         # Start export process asynchronously
         spawn(fn -> Exporter.perform_export(job) end)
 
@@ -35,6 +38,7 @@ defmodule FuzzyCatalogWeb.ImportExportController do
         |> redirect(to: ~p"/admin/import-export")
 
       {:error, changeset} ->
+        Logger.error("Failed to create export job: #{inspect(changeset.errors)}")
         filter_options = Exporter.available_filters()
         render(conn, :new_export, changeset: changeset, filter_options: filter_options)
     end
@@ -148,14 +152,31 @@ defmodule FuzzyCatalogWeb.ImportExportController do
       |> put_flash(:error, "Export file not available")
       |> redirect(to: ~p"/admin/import-export")
     else
-      case Storage.get_file_url(job.file_path) do
-        {:ok, file_url} ->
-          redirect(conn, external: file_url)
+      # Build the full file path
+      base_path =
+        Application.get_env(:fuzzy_catalog, :storage, [])
+        |> Keyword.get(:local, [])
+        |> Keyword.get(:base_path, "priv/static/uploads")
 
-        {:error, _reason} ->
-          conn
-          |> put_flash(:error, "Export file not found")
-          |> redirect(to: ~p"/admin/import-export")
+      full_path = Path.join(base_path, job.file_path)
+
+      if File.exists?(full_path) do
+        # Determine content type based on file extension
+        content_type =
+          case Path.extname(job.file_name) do
+            ".json" -> "application/json"
+            ".csv" -> "text/csv"
+            _ -> "application/octet-stream"
+          end
+
+        conn
+        |> put_resp_content_type(content_type)
+        |> put_resp_header("content-disposition", "attachment; filename=\"#{job.file_name}\"")
+        |> send_file(200, full_path)
+      else
+        conn
+        |> put_flash(:error, "Export file not found")
+        |> redirect(to: ~p"/admin/import-export")
       end
     end
   end
@@ -167,8 +188,17 @@ defmodule FuzzyCatalogWeb.ImportExportController do
     case ImportExport.delete_job(job) do
       {:ok, _job} ->
         # Clean up associated file
-        if job.file_path && File.exists?(job.file_path) do
-          File.rm(job.file_path)
+        if job.file_path do
+          base_path =
+            Application.get_env(:fuzzy_catalog, :storage, [])
+            |> Keyword.get(:local, [])
+            |> Keyword.get(:base_path, "priv/static/uploads")
+
+          full_path = Path.join(base_path, job.file_path)
+
+          if File.exists?(full_path) do
+            File.rm(full_path)
+          end
         end
 
         conn
