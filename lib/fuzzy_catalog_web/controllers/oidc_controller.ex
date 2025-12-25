@@ -155,6 +155,23 @@ defmodule FuzzyCatalogWeb.OIDCController do
       "Handling successful OIDC auth for email: #{email}, provider_uid: #{provider_uid}"
     )
 
+    if is_nil(email) || is_nil(provider_uid) do
+      Logger.error(
+        "OIDC provider returned nil values for email or uid - user_info: #{inspect(user_info)}"
+      )
+
+      conn
+      |> put_flash(
+        :error,
+        "Authentication failed: required information not provided by the authentication service. Please contact support."
+      )
+      |> redirect(to: ~p"/users/log-in")
+    else
+      handle_user_creation(conn, email, provider, provider_uid, token)
+    end
+  end
+
+  defp handle_user_creation(conn, email, provider, provider_uid, token) do
     case find_or_create_user(email, provider, provider_uid, token) do
       {:ok, user} ->
         Logger.info("OIDC user login successful for user ID: #{user.id}")
