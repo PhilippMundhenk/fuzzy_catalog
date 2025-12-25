@@ -82,14 +82,17 @@
       </div>
     </div>
 
-    <div class="mt-8 border-t border-gray-200 pt-8">
-      <h3 class="text-lg font-medium text-gray-900">Import Requirements</h3>
+    <div class="mt-8 border-t border-base-300 pt-8">
+      <h3 class="text-lg font-medium text-base-content">Import Requirements</h3>
       <div class="mt-4">
-        <h4 class="text-sm font-medium text-gray-900">JSON Format</h4>
-        <p class="text-sm text-gray-600 mt-1">
+        <h4 class="text-sm font-medium text-base-content">JSON Format</h4>
+        <p class="text-sm text-base-content/70 mt-1">
           Must contain an "items" array with book objects. Each book should have at minimum a "title" field.
         </p>
-        <pre class="mt-2 text-xs bg-gray-100 p-3 rounded-md" phx-no-curly-interpolation>
+        <pre
+          class="mt-2 text-xs bg-base-200 text-base-content p-3 rounded-md"
+          phx-no-curly-interpolation
+        >
 {
   "items": [
     {
@@ -106,18 +109,18 @@
       </div>
 
       <div class="mt-6">
-        <h4 class="text-sm font-medium text-gray-900">CSV Format</h4>
-        <p class="text-sm text-gray-600 mt-1">
+        <h4 class="text-sm font-medium text-base-content">CSV Format</h4>
+        <p class="text-sm text-base-content/70 mt-1">
           Must include "title" and "author" columns at minimum. Additional columns will be imported if they match book fields.
         </p>
-        <pre class="mt-2 text-xs bg-gray-100 p-3 rounded-md">
+        <pre class="mt-2 text-xs bg-base-200 text-base-content p-3 rounded-md">
 title,author,isbn13,media_type,genre
 "Book Title","Author Name","9781234567890","book","Fiction"
     </pre>
       </div>
 
-      <div class="mt-6 text-sm text-gray-600">
-        <h4 class="text-sm font-medium text-gray-900 mb-2">Import Process</h4>
+      <div class="mt-6 text-sm text-base-content/70">
+        <h4 class="text-sm font-medium text-base-content mb-2">Import Process</h4>
         <ul class="list-disc list-inside space-y-1">
           <li>Files are validated and you'll see a preview before importing</li>
           <li>Duplicate books are detected by ISBN or title/author combination</li>
