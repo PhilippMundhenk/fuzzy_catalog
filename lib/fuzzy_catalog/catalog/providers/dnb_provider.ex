@@ -72,44 +72,103 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
 
   defp first_record({:ok, xml}) do
     case extract_records(xml) do
-      [record | _] -> {:ok, build_book(record)}
-      [] -> {:error, "No DNB record found"}
+      {:ok, [record | _]} ->
+        case safe_build_book(record) do
+          {:ok, book} -> {:ok, book}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:ok, []} ->
+        {:error, "No DNB record found"}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp all_records({:error, _} = err), do: err
 
   defp all_records({:ok, xml}) do
-    books =
-      xml
-      |> extract_records()
-      |> Enum.map(&build_book/1)
+    case extract_records(xml) do
+      {:ok, records} ->
+        results = Enum.map(records, &safe_build_book/1)
 
-    {:ok, books}
+        {oks, errs} =
+          Enum.split_with(results, fn
+            {:ok, _} -> true
+            {:error, _} -> false
+          end)
+
+        if errs != [] do
+          # return a structured error so caller can inspect individual failures
+          {:error, {:build_errors, Enum.map(errs, fn {:error, e} -> e end)}}
+        else
+          books = Enum.map(oks, fn {:ok, b} -> b end)
+          {:ok, books}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   # ------------------------------------------------------------
   # XML parsing
   # ------------------------------------------------------------
 
-  defp extract_records(xml) do
-    # Return the xmlElement nodes returned by SweetXml instead of converting
-    # them to strings. build_book/1 and SweetXml's xpath handle xmlElement
-    # nodes directly.
-    xml
-    |> xpath(~x"//record"l)
+  defp extract_records(xml) when is_binary(xml) do
+    with {:ok, doc} <- parse_xml(xml) do
+      # doc is the whole parsed document; using // here is fine.
+      {:ok, xpath(doc, ~x"//record"l)}
+    else
+      {:error, _} = err -> err
+    end
+  end
+
+  defp parse_xml(xml) when is_binary(xml) do
+    try do
+      {:ok, SweetXml.parse(xml)}
+    catch
+      :exit, reason ->
+        Logger.debug("DNB XML parse exit: #{inspect(reason)}")
+        {:error, {:xml_parse_exit, inspect(reason)}}
+
+      :error, reason ->
+        Logger.debug("DNB XML parse error: #{inspect(reason)}")
+        {:error, {:xml_parse_error, inspect(reason)}}
+    rescue
+      e ->
+        Logger.debug("DNB XML parse exception: #{Exception.message(e)}")
+        {:error, {:xml_parse_exception, Exception.message(e)}}
+    end
+  end
+
+  defp safe_build_book(record) do
+    try do
+      {:ok, build_book(record)}
+    rescue
+      e ->
+        Logger.debug("Failed building DNB book: #{inspect(e)}")
+        {:error, {:build_exception, Exception.message(e)}}
+    catch
+      kind, reason ->
+        Logger.debug("Failed building DNB book (#{kind}): #{inspect(reason)}")
+        {:error, {:build_error, {kind, inspect(reason)}}}
+    end
   end
 
   defp build_book(xml) do
-    title = text(xml, "//dc:title")
-    subtitle = text(xml, "//dc:title[@xsi:type='subtitle']")
+    # Use relative XPaths so we search within the record node rather than
+    # attempting to re-parse or query the whole document.
+    title = text(xml, ".//dc:title")
+    subtitle = text(xml, ".//dc:title[@xsi:type='subtitle']")
 
     authors =
       xml
-      |> texts("//dc:creator")
+      |> texts(".//dc:creator")
       |> Enum.join(", ")
 
-    identifiers = texts(xml, "//dc:identifier")
+    identifiers = texts(xml, ".//dc:identifier")
     {isbn10, isbn13} = extract_isbns(identifiers)
 
     %{
@@ -118,11 +177,11 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
       author: authors,
       isbn10: isbn10,
       isbn13: isbn13,
-      publisher: text(xml, "//dc:publisher"),
-      publication_date: parse_date(text(xml, "//dc:date")),
-      pages: parse_pages(text(xml, "//dc:extent")),
-      description: text(xml, "//dc:description"),
-      genre: text(xml, "//dc:subject"),
+      publisher: text(xml, ".//dc:publisher"),
+      publication_date: parse_date(text(xml, ".//dc:date")),
+      pages: parse_pages(text(xml, ".//dc:extent")),
+      description: text(xml, ".//dc:description"),
+      genre: text(xml, ".//dc:subject"),
       series: nil,
       series_number: nil,
       original_title: nil,
@@ -135,6 +194,9 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   # ------------------------------------------------------------
 
   defp text(xml, path) do
+    # xpath is invoked on whatever node we pass in; expect callers to use
+    # relative paths (".//...") when passing a record node. Keep namespace
+    # bindings here so caller-side paths can use dc: and xsi: prefixes.
     xpath(xml, ~x"#{path}/text()"s, dc: dc_ns(), xsi: xsi_ns())
     |> blank_to_nil()
   end
