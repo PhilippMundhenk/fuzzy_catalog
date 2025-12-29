@@ -38,7 +38,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   end
 
   @impl true
-  # UPC / barcode often *is* an ISBN → treat identically
+  # UPC / barcode often *is* an ISBN  treat identically
   def lookup_by_upc(upc) when is_binary(upc) do
     lookup_by_isbn(upc)
   end
@@ -130,11 +130,13 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
     catch
       :exit, reason ->
         Logger.debug("DNB XML parse exit (raw): #{inspect(reason)}")
-        {:error, "XML parse exit: #{inspect(reason)}"}
+        # Provide a string-only reason for callers
+        {:error, "XML parse exit: invalid XML from DNB"}
 
       :error, reason ->
         Logger.debug("DNB XML parse error (raw): #{inspect(reason)}")
-        {:error, "XML parse error: #{inspect(reason)}"}
+        {:error, "XML parse error: invalid XML from DNB"}
+
     rescue
       e ->
         Logger.debug("DNB XML parse exception (raw): #{Exception.format(:error, e, __STACKTRACE__)}")
@@ -147,7 +149,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
       {:ok, build_book(record)}
     rescue
       e ->
-        # return a plain string message so callers won't try to interpolate a tuple
+        # Keep the full exception logged, but return a plain string message
         msg = Exception.format(:error, e, __STACKTRACE__)
         Logger.debug("Failed building DNB book (exception raw): #{inspect(e)}")
         {:error, "build_exception: #{msg}"}
@@ -155,7 +157,21 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
       kind, reason ->
         # catch can get exits or throws; stringify them
         Logger.debug("Failed building DNB book (caught #{inspect(kind)} raw): #{inspect(reason)}")
-        {:error, "build_error(#{inspect(kind)}): #{inspect(reason)}"}
+
+        msg =
+          case {kind, reason} do
+            {:exit, {:fatal, _}} ->
+              # xmerl fatal error while parsing/re-parsing XML inside xpath
+              "Invalid XML response from DNB"
+            {:exit, other} ->
+              "DNB provider exit: #{inspect(other)}"
+            {:error, other} ->
+              "DNB provider error: #{inspect(other)}"
+            _ ->
+              "DNB provider build error"
+          end
+
+        {:error, msg}
     end
   end
 
