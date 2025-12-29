@@ -14,7 +14,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   import SweetXml
   require Logger
 
-@sru_base "https://services.dnb.de/sru/dnb"
+  @sru_base "https://services.dnb.de/sru/dnb"
 
   # ------------------------------------------------------------
   # Behaviour callbacks
@@ -93,9 +93,11 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   # ------------------------------------------------------------
 
   defp extract_records(xml) do
+    # Return the xmlElement nodes returned by SweetXml instead of converting
+    # them to strings. build_book/1 and SweetXml's xpath handle xmlElement
+    # nodes directly.
     xml
     |> xpath(~x"//record"l)
-    |> Enum.map(&to_string/1)
   end
 
   defp build_book(xml) do
@@ -175,7 +177,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
 
   defp cover_url(isbn) do
     normalized = isbn |> String.replace(~r/[^0-9X]/i, "")
-"https://portal.dnb.de/opac/mvb/cover?isbn=#{hyphenate_isbn(normalized)}"
+    "https://portal.dnb.de/opac/mvb/cover?isbn=#{hyphenate_isbn(normalized)}"
   end
 
   # Minimal hyphenation for DNB cover service
@@ -195,6 +197,6 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(v), do: v
 
-defp dc_ns, do: "http://purl.org/dc/elements/1.1/"
-defp xsi_ns, do: "http://www.w3.org/2001/XMLSchema-instance"
+  defp dc_ns, do: "http://purl.org/dc/elements/1.1/"
+  defp xsi_ns, do: "http://www.w3.org/2001/XMLSchema-instance"
 end
