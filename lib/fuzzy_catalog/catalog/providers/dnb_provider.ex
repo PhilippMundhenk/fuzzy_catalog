@@ -60,7 +60,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
     case HTTPoison.get(url, [], follow_redirect: true) do
       {:ok, %{status_code: 200, body: body}} -> {:ok, body}
       {:ok, %{status_code: code}} -> {:error, "SRU HTTP #{code}"}
-      {:error, reason} -> {:error, inspect(reason)}
+      {:error, reason} -> {:error, "SRU HTTP error: #{inspect(reason)}"}
     end
   end
 
@@ -100,7 +100,6 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
           end)
 
         if errs != [] do
-          # return a structured error so caller can inspect individual failures
           {:error, {:build_errors, Enum.map(errs, fn {:error, e} -> e end)}}
         else
           books = Enum.map(oks, fn {:ok, b} -> b end)
@@ -130,16 +129,16 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
       {:ok, SweetXml.parse(xml)}
     catch
       :exit, reason ->
-        Logger.debug("DNB XML parse exit: #{inspect(reason)}")
-        {:error, {:xml_parse_exit, inspect(reason)}}
+        Logger.debug("DNB XML parse exit (raw): #{inspect(reason)}")
+        {:error, "XML parse exit: #{inspect(reason)}"}
 
       :error, reason ->
-        Logger.debug("DNB XML parse error: #{inspect(reason)}")
-        {:error, {:xml_parse_error, inspect(reason)}}
+        Logger.debug("DNB XML parse error (raw): #{inspect(reason)}")
+        {:error, "XML parse error: #{inspect(reason)}"}
     rescue
       e ->
-        Logger.debug("DNB XML parse exception: #{Exception.message(e)}")
-        {:error, {:xml_parse_exception, Exception.message(e)}}
+        Logger.debug("DNB XML parse exception (raw): #{Exception.format(:error, e, __STACKTRACE__)}")
+        {:error, "XML parse exception: #{Exception.message(e)}"}
     end
   end
 
@@ -148,12 +147,15 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
       {:ok, build_book(record)}
     rescue
       e ->
-        Logger.debug("Failed building DNB book: #{inspect(e)}")
-        {:error, {:build_exception, Exception.message(e)}}
+        # return a plain string message so callers won't try to interpolate a tuple
+        msg = Exception.format(:error, e, __STACKTRACE__)
+        Logger.debug("Failed building DNB book (exception raw): #{inspect(e)}")
+        {:error, "build_exception: #{msg}"}
     catch
       kind, reason ->
-        Logger.debug("Failed building DNB book (#{kind}): #{inspect(reason)}")
-        {:error, {:build_error, {kind, inspect(reason)}}}
+        # catch can get exits or throws; stringify them
+        Logger.debug("Failed building DNB book (caught #{inspect(kind)} raw): #{inspect(reason)}")
+        {:error, "build_error(#{inspect(kind)}): #{inspect(reason)}"}
     end
   end
 
