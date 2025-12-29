@@ -73,7 +73,7 @@ defmodule FuzzyCatalog.MixProject do
       {:flop, "~> 0.26.0"},
       {:flop_phoenix, "~> 0.25.3"},
       {:assent, "~> 0.3.1"},
-      {:httppoison, "~> 1.8"},
+      {:httpoison, "~> 1.8"},
       {:sweet_xml, "~> 0.7"}
     ]
   end
