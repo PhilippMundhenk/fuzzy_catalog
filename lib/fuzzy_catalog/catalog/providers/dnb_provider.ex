@@ -95,7 +95,7 @@ defmodule FuzzyCatalog.Catalog.Providers.DNBProvider do
   defp extract_records(xml) do
     xml
     |> xpath(~x"//record"l)
-    |> Enum.map(&SweetXml.to_string/1)
+    |> Enum.map(&to_string/1)
   end
 
   defp build_book(xml) do
