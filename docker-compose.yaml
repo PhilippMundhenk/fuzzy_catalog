@@ -1,11 +1,17 @@
 services:
   db:
-    image: postgres:alpine
+    image: postgres:17-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: fuzzy_catalog
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped
   web:
     build:
       context: .
@@ -16,7 +22,10 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
     env_file: .env.docker
 volumes:
   postgres_data:
