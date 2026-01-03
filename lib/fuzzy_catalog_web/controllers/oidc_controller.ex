@@ -9,13 +9,8 @@ defmodule FuzzyCatalogWeb.OIDCController do
   def authorize(conn, _params) do
     config = Application.get_env(:fuzzy_catalog, :oidc)
 
-    Logger.info("OIDC authorize initiated with config: #{inspect(config, pretty: true)}")
-
     case Assent.Strategy.OIDC.authorize_url(config) do
       {:ok, %{url: url, session_params: session_params}} ->
-        Logger.info("OIDC authorize successful, redirecting to: #{url}")
-        Logger.info("Session params to store: #{inspect(session_params, pretty: true)}")
-
         conn
         |> put_session(:oidc_state, session_params["state"])
         |> put_session(:oidc_nonce, session_params["nonce"])
@@ -42,14 +37,6 @@ defmodule FuzzyCatalogWeb.OIDCController do
     state = get_session(conn, :oidc_state)
     nonce = get_session(conn, :oidc_nonce)
     stored_session_params = get_session(conn, :oidc_session_params)
-
-    Logger.info(
-      "OIDC callback received with params: #{inspect(Map.drop(params, ["code"]), pretty: true)}"
-    )
-
-    Logger.info("Retrieved session state: #{inspect(state)}")
-    Logger.info("Retrieved session nonce: #{inspect(nonce)}")
-    Logger.info("Stored session params: #{inspect(stored_session_params, pretty: true)}")
 
     # Use stored session params if individual values are missing, or fallback to params
     session_params =
@@ -84,8 +71,6 @@ defmodule FuzzyCatalogWeb.OIDCController do
           %{}
       end
 
-    Logger.info("Final session params for callback: #{inspect(session_params, pretty: true)}")
-
     # Check if we have required state parameter
     state_value = session_params["state"]
 
@@ -109,13 +94,19 @@ defmodule FuzzyCatalogWeb.OIDCController do
       # Merge session_params into config for Assent
       config_with_session = Keyword.put(config, :session_params, session_params_atoms)
 
-      Logger.info(
-        "Config with session params (atom keys): #{inspect(config_with_session, pretty: true)}"
-      )
-
       case Assent.Strategy.OIDC.callback(config_with_session, params) do
         {:ok, %{user: user_info, token: token}} ->
-          Logger.info("OIDC callback successful for user: #{inspect(user_info["email"])}")
+          # If user_info is sparse, try to fetch from userinfo endpoint
+          user_info =
+            if is_nil(user_info["email"]) || is_nil(user_info["mail"]) do
+              case Assent.Strategy.OIDC.fetch_userinfo(config_with_session, token) do
+                {:ok, fetched_user_info} -> Map.merge(user_info, fetched_user_info)
+                {:error, _error} -> user_info
+              end
+            else
+              user_info
+            end
+
           handle_successful_auth(conn, user_info, token)
 
         {:error, error} ->
@@ -147,13 +138,10 @@ defmodule FuzzyCatalogWeb.OIDCController do
   end
 
   defp handle_successful_auth(conn, user_info, token) do
-    email = user_info["email"]
+    # Try multiple common claims for email as some providers use 'mail' or others
+    email = user_info["email"] || user_info["mail"]
     provider_uid = user_info["sub"]
     provider = "oidc"
-
-    Logger.info(
-      "Handling successful OIDC auth for email: #{email}, provider_uid: #{provider_uid}"
-    )
 
     if is_nil(email) || is_nil(provider_uid) do
       Logger.error(
