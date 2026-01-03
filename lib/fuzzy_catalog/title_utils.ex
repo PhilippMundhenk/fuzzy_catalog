@@ -5,35 +5,37 @@ defmodule FuzzyCatalog.TitleUtils do
   Provides normalization and matching functions for book titles.
   """
 
-  @common_postfixes [
-    # Audio-specific postfixes
-    "(Unabridged)",
-    "(Abridged)",
-    "(Audio CD)",
-    "(Audiobook)",
+  defp common_postfixes do
+    [
+      # Audio-specific postfixes
+      "(Unabridged)",
+      "(Abridged)",
+      "(Audio CD)",
+      "(Audiobook)",
 
-    # Format-specific postfixes
-    "(Paperback)",
-    "(Hardcover)",
-    "(Kindle Edition)",
-    "(eBook)",
-    "(Digital)",
+      # Format-specific postfixes
+      "(Paperback)",
+      "(Hardcover)",
+      "(Kindle Edition)",
+      "(eBook)",
+      "(Digital)",
 
-    # Edition-specific postfixes
-    "(1st Edition)",
-    "(2nd Edition)",
-    "(3rd Edition)",
-    "(First Edition)",
-    "(Second Edition)",
-    "(Third Edition)",
-    "(Revised Edition)",
-    "(Updated Edition)",
-    "(Anniversary Edition)",
+      # Edition-specific postfixes
+      "(1st Edition)",
+      "(2nd Edition)",
+      "(3rd Edition)",
+      "(First Edition)",
+      "(Second Edition)",
+      "(Third Edition)",
+      "(Revised Edition)",
+      "(Updated Edition)",
+      "(Anniversary Edition)",
 
-    # Generic edition markers
-    ~r/\(\d+(?:st|nd|rd|th) Edition\)/,
-    ~r/\(.*? Edition\)/
-  ]
+      # Generic edition markers
+      ~r/\(\d+(?:st|nd|rd|th) Edition\)/,
+      ~r/\(.*? Edition\)/
+    ]
+  end
 
   @doc """
   Normalizes a title by removing common postfixes that don't affect the core title.
@@ -66,7 +68,7 @@ defmodule FuzzyCatalog.TitleUtils do
   def normalize_title(nil), do: nil
 
   defp remove_common_postfixes(title) do
-    Enum.reduce(@common_postfixes, title, fn postfix, acc ->
+    Enum.reduce(common_postfixes(), title, fn postfix, acc ->
       case postfix do
         %Regex{} = regex ->
           String.replace(acc, regex, "")

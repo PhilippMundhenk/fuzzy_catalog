@@ -58,9 +58,30 @@ defmodule FuzzyCatalog.ImportExport.Job do
   """
   def export_changeset(job, attrs) do
     job
-    |> changeset(attrs)
+    |> cast(attrs, [
+      :file_path,
+      :file_name,
+      :file_size,
+      :progress,
+      :total_items,
+      :processed_items,
+      :error_message,
+      :filters,
+      :user_id
+    ])
     |> put_change(:type, "export")
-    |> put_change(:expires_at, DateTime.utc_now() |> DateTime.add(7, :day))
+    |> put_change(:status, "pending")
+    |> put_change(
+      :expires_at,
+      DateTime.utc_now() |> DateTime.add(7, :day) |> DateTime.truncate(:second)
+    )
+    |> validate_required([:type, :status, :user_id])
+    |> validate_inclusion(:type, @type_values)
+    |> validate_inclusion(:status, @status_values)
+    |> validate_number(:progress, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
+    |> validate_number(:processed_items, greater_than_or_equal_to: 0)
+    |> validate_number(:total_items, greater_than_or_equal_to: 0)
+    |> foreign_key_constraint(:user_id)
   end
 
   @doc """
@@ -68,9 +89,26 @@ defmodule FuzzyCatalog.ImportExport.Job do
   """
   def import_changeset(job, attrs) do
     job
-    |> changeset(attrs)
+    |> cast(attrs, [
+      :file_path,
+      :file_name,
+      :file_size,
+      :progress,
+      :total_items,
+      :processed_items,
+      :error_message,
+      :filters,
+      :user_id
+    ])
     |> put_change(:type, "import")
-    |> validate_required([:file_path, :file_name])
+    |> put_change(:status, "pending")
+    |> validate_required([:type, :status, :user_id, :file_path, :file_name])
+    |> validate_inclusion(:type, @type_values)
+    |> validate_inclusion(:status, @status_values)
+    |> validate_number(:progress, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
+    |> validate_number(:processed_items, greater_than_or_equal_to: 0)
+    |> validate_number(:total_items, greater_than_or_equal_to: 0)
+    |> foreign_key_constraint(:user_id)
   end
 
   @doc """
@@ -90,7 +128,7 @@ defmodule FuzzyCatalog.ImportExport.Job do
     job
     |> cast(attrs, [:file_path, :file_name, :file_size, :error_message])
     |> put_change(:status, "completed")
-    |> put_change(:completed_at, DateTime.utc_now())
+    |> put_change(:completed_at, DateTime.utc_now() |> DateTime.truncate(:second))
     |> put_change(:progress, 100)
   end
 
@@ -101,7 +139,7 @@ defmodule FuzzyCatalog.ImportExport.Job do
     job
     |> cast(%{error_message: error_message}, [:error_message])
     |> put_change(:status, "failed")
-    |> put_change(:completed_at, DateTime.utc_now())
+    |> put_change(:completed_at, DateTime.utc_now() |> DateTime.truncate(:second))
   end
 
   @doc """
