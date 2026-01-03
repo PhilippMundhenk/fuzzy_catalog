@@ -1,5 +1,14 @@
 
 - - -
+## v0.5.1 - 2026-01-03
+#### Bug Fixes
+- OIDC login failing with Authelia - (0a15f84) - *jfro*
+- import page rendering poorly in dark mode - (b9a7227) - *jfro*
+- exporter just breaking on attempt to export fixes #30 - (9815bf6) - *jfro*
+- catch & error if missing uid or email from OIDC fixes #31 - (91b4034) - *jfro*
+
+- - -
+
 
 ## v0.5.0 - 2026-01-03
 #### Features
