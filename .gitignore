@@ -42,3 +42,6 @@ npm-debug.log
 .env.docker
 mise.local.toml
 /priv/Calibre Library/
+/local.docs
+/test/integrations
+/k8s
