@@ -11,5 +11,12 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-sed -i '' "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" mix.exs
+# Portable sed in-place update
+if sed --version >/dev/null 2>&1; then
+  # GNU sed
+  sed -i "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" mix.exs
+else
+  # BSD/macOS sed
+  sed -i '' "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" mix.exs
+fi
 git add mix.exs
