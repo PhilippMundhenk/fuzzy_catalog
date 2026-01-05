@@ -95,6 +95,9 @@ defmodule FuzzyCatalog.Catalog.Providers.HardcoverProvider do
         release_date
         asin
         audio_seconds
+        language {
+          language
+        }
         book {
           id
           title
@@ -263,6 +266,9 @@ defmodule FuzzyCatalog.Catalog.Providers.HardcoverProvider do
     # Parse publication date
     publication_date = parse_date(edition["release_date"])
 
+    # Extract language from the language object relationship
+    language = get_in(edition, ["language", "language"])
+
     %{
       title: edition["title"] || book_data["title"] || "Unknown Title",
       subtitle: edition["subtitle"],
@@ -277,7 +283,8 @@ defmodule FuzzyCatalog.Catalog.Providers.HardcoverProvider do
       series: format_book_series(book_series),
       series_number: nil,
       cover_url: extract_cover_url(image),
-      suggested_media_types: media_types
+      suggested_media_types: media_types,
+      language: language
     }
   end
 
@@ -478,7 +485,8 @@ defmodule FuzzyCatalog.Catalog.Providers.HardcoverProvider do
       series: series,
       series_number: nil,
       cover_url: cover_url,
-      suggested_media_types: media_types
+      suggested_media_types: media_types,
+      language: nil
     }
   end
 

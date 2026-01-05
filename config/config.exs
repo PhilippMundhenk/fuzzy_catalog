@@ -27,8 +27,8 @@ config :fuzzy_catalog,
 # Book lookup provider configuration
 config :fuzzy_catalog, :book_lookup,
   providers: [
-    FuzzyCatalog.Catalog.Providers.HardcoverProvider,
     FuzzyCatalog.Catalog.Providers.OpenLibraryProvider,
+    FuzzyCatalog.Catalog.Providers.HardcoverProvider,
     FuzzyCatalog.Catalog.Providers.GoogleBooksProvider,
     FuzzyCatalog.Catalog.Providers.LibraryOfCongressProvider
   ]

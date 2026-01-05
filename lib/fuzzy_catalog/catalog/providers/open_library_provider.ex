@@ -18,19 +18,37 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
 
     case validate_isbn(clean_isbn) do
       :valid ->
-        url =
-          "#{@search_api_url}?isbn=#{clean_isbn}&fields=title,author_name,first_publish_year,publish_date,isbn,publisher,key,subtitle,subject,format,editions,series,series_name,number_of_pages,notes,work_titles,alternative_title,edition_notes,lcc,ddc,number_of_pages_median&limit=1"
-
-        case make_request(url) do
-          {:ok, response} ->
-            parse_isbn_search_response(response)
+        # NEW: Try direct edition lookup first for accurate edition-specific data
+        case fetch_edition_by_isbn(clean_isbn) do
+          {:ok, edition_data} ->
+            # Successfully got edition data, normalize it
+            parse_edition_response(edition_data)
 
           {:error, reason} ->
-            {:error, reason}
+            # Fallback to search API approach
+            Logger.warning(
+              "OpenLibrary: Direct ISBN lookup failed (#{reason}), falling back to search API"
+            )
+
+            lookup_by_isbn_via_search(clean_isbn)
         end
 
       :invalid ->
         {:error, "Invalid ISBN format"}
+    end
+  end
+
+  # Fallback: lookup via search API (original implementation)
+  defp lookup_by_isbn_via_search(clean_isbn) do
+    url =
+      "#{@search_api_url}?isbn=#{clean_isbn}&fields=title,author_name,first_publish_year,publish_date,isbn,publisher,key,subtitle,subject,format,editions,series,series_name,number_of_pages,notes,work_titles,alternative_title,edition_notes,lcc,ddc,number_of_pages_median&limit=1"
+
+    case make_request(url) do
+      {:ok, response} ->
+        parse_isbn_search_response(response)
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -171,6 +189,27 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
     end
   end
 
+  # Fetch edition data directly by ISBN using OpenLibrary's ISBN endpoint
+  # OpenLibrary provides /isbn/{isbn}.json that redirects to the edition page
+  defp fetch_edition_by_isbn(isbn) when is_binary(isbn) do
+    isbn_url = "#{@base_url}/isbn/#{isbn}.json"
+
+    Logger.debug("Fetching OpenLibrary edition by ISBN: #{isbn_url}")
+
+    case make_request(isbn_url) do
+      {:ok, edition_data} when is_map(edition_data) ->
+        Logger.debug(
+          "OpenLibrary edition by ISBN response: #{inspect(edition_data, pretty: true)}"
+        )
+
+        {:ok, edition_data}
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch OpenLibrary edition by ISBN #{isbn}: #{reason}")
+        {:error, reason}
+    end
+  end
+
   # Extract series data from edition JSON response
   defp extract_series_from_edition(edition_data) when is_map(edition_data) do
     # Edition JSON can have series data in multiple formats
@@ -294,6 +333,62 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
     {:error, "Invalid response format"}
   end
 
+  # Parse edition API response and normalize to book data format
+  defp parse_edition_response(edition_data) when is_map(edition_data) do
+    # Extract ISBNs
+    isbn10 = extract_isbn_from_edition(edition_data, 10)
+    isbn13 = extract_isbn_from_edition(edition_data, 13)
+
+    # Use first available ISBN for author lookup
+    isbn_for_author_lookup = isbn13 || isbn10
+
+    # Fetch author names using hybrid approach (search API)
+    author_names =
+      if isbn_for_author_lookup do
+        fetch_author_names_for_edition(isbn_for_author_lookup)
+      else
+        "Unknown Author"
+      end
+
+    # Extract language
+    language = extract_language_from_edition(edition_data)
+
+    # Extract publisher (first one if multiple)
+    publisher =
+      case edition_data["publishers"] do
+        [first | _] when is_binary(first) -> first
+        _ -> nil
+      end
+
+    # Extract series from edition
+    {series_name, series_number} = extract_series_from_edition(edition_data)
+
+    # Build book data map
+    book_data = %{
+      title: build_edition_title(edition_data),
+      author: author_names,
+      isbn10: isbn10,
+      isbn13: isbn13,
+      publisher: publisher,
+      publication_date: extract_edition_publish_date(edition_data),
+      pages: edition_data["number_of_pages"] || parse_pagination(edition_data["pagination"]),
+      key: edition_data["key"],
+      cover_url: generate_cover_url_from_edition(edition_data, isbn13 || isbn10),
+      subtitle: edition_data["subtitle"],
+      genre: extract_subjects_from_edition(edition_data),
+      series: series_name,
+      series_number: series_number,
+      suggested_media_types: extract_media_type_from_edition(edition_data),
+      language: language
+    }
+
+    {:ok, book_data}
+  rescue
+    error ->
+      Logger.error("Error parsing edition response: #{inspect(error)}")
+      {:error, "Failed to parse edition data"}
+  end
+
   defp normalize_search_result(doc) do
     isbn10 = extract_isbn_from_list(doc["isbn"], 10)
     isbn13 = extract_isbn_from_list(doc["isbn"], 13)
@@ -335,7 +430,8 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
       genre: extract_search_subjects(doc["subject"]),
       series: series_name,
       series_number: series_number,
-      suggested_media_types: extract_media_types_from_formats(doc["format"])
+      suggested_media_types: extract_media_types_from_formats(doc["format"]),
+      language: nil
     }
   end
 
@@ -383,7 +479,8 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
       genre: extract_search_subjects(doc["subject"]),
       series: series_name,
       series_number: series_number,
-      suggested_media_types: edition_formats
+      suggested_media_types: edition_formats,
+      language: nil
     }
   end
 
@@ -393,6 +490,120 @@ defmodule FuzzyCatalog.Catalog.Providers.OpenLibraryProvider do
   defp generate_cover_url(isbn) when is_binary(isbn) do
     clean_isbn = String.replace(isbn, ~r/[^0-9X]/, "")
     "#{@covers_api_url}/b/isbn/#{clean_isbn}-M.jpg"
+  end
+
+  # Generate cover URL from edition data, preferring edition covers field
+  defp generate_cover_url_from_edition(edition_data, fallback_isbn) do
+    case edition_data["covers"] do
+      [cover_id | _] when is_integer(cover_id) and cover_id > 0 ->
+        "#{@covers_api_url}/b/id/#{cover_id}-M.jpg"
+
+      _ ->
+        # Fallback to ISBN-based cover
+        generate_cover_url(fallback_isbn)
+    end
+  end
+
+  # Extract ISBN from edition data
+  defp extract_isbn_from_edition(edition_data, length) do
+    field = if length == 10, do: "isbn_10", else: "isbn_13"
+
+    case edition_data[field] do
+      [isbn | _] when is_binary(isbn) -> isbn
+      isbn when is_binary(isbn) -> isbn
+      _ -> nil
+    end
+  end
+
+  # Build complete title (may include edition name or subtitle)
+  defp build_edition_title(edition_data) do
+    base_title = edition_data["title"] || "Unknown Title"
+
+    # Some editions have descriptive edition names
+    case edition_data["edition_name"] do
+      name when is_binary(name) and name != "" ->
+        "#{base_title} (#{name})"
+
+      _ ->
+        base_title
+    end
+  end
+
+  # Extract language from edition
+  defp extract_language_from_edition(edition_data) do
+    case edition_data["languages"] do
+      [%{"key" => lang_key} | _] ->
+        # Extract language code from "/languages/eng" -> "eng"
+        lang_key
+        |> String.split("/")
+        |> List.last()
+
+      _ ->
+        nil
+    end
+  end
+
+  # Extract publish date from edition (more specific than search)
+  defp extract_edition_publish_date(edition_data) do
+    case edition_data["publish_date"] do
+      date when is_binary(date) ->
+        extract_publish_date(date)
+
+      _ ->
+        nil
+    end
+  end
+
+  # Parse pagination field (e.g., "352 p." -> 352)
+  defp parse_pagination(nil), do: nil
+
+  defp parse_pagination(pagination) when is_binary(pagination) do
+    case Integer.parse(pagination) do
+      {num, _} -> num
+      :error -> nil
+    end
+  end
+
+  # Extract subjects/genres from edition (may be limited)
+  defp extract_subjects_from_edition(edition_data) do
+    case edition_data["subjects"] do
+      subjects when is_list(subjects) and length(subjects) > 0 ->
+        subjects
+        |> Enum.take(3)
+        |> Enum.join(", ")
+
+      _ ->
+        nil
+    end
+  end
+
+  # Extract media type from edition's physical_format field
+  defp extract_media_type_from_edition(edition_data) do
+    case edition_data["physical_format"] do
+      format when is_binary(format) ->
+        case map_format_to_media_type(format) do
+          nil -> []
+          media_type -> [media_type]
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  # Fetch author names for an edition using search API (hybrid approach)
+  # This makes one search API call to get author names, which is cheaper
+  # than fetching each author individually from the author API
+  defp fetch_author_names_for_edition(isbn) when is_binary(isbn) do
+    url = "#{@search_api_url}?isbn=#{isbn}&fields=author_name&limit=1"
+
+    case make_request(url) do
+      {:ok, %{"docs" => [%{"author_name" => names} | _]}} ->
+        extract_author_names(names)
+
+      _ ->
+        "Unknown Author"
+    end
   end
 
   defp extract_author_names(nil), do: "Unknown Author"

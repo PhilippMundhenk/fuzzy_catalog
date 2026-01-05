@@ -270,6 +270,7 @@
                     <input type="hidden" name="book[author]" value={book.author} />
                     <input type="hidden" name="book[isbn10]" value={book.isbn10 || ""} />
                     <input type="hidden" name="book[isbn13]" value={book.isbn13 || ""} />
+                    <input type="hidden" name="book[language]" value={book.language || ""} />
                     <input
                       type="hidden"
                       name="book[cover_url]"
@@ -312,6 +313,7 @@
               <input type="hidden" name="book[author]" value={@lookup_results.author} />
               <input type="hidden" name="book[isbn10]" value={@lookup_results.isbn10 || ""} />
               <input type="hidden" name="book[isbn13]" value={@lookup_results.isbn13 || ""} />
+              <input type="hidden" name="book[language]" value={@lookup_results.language || ""} />
               <input
                 type="hidden"
                 name="book[cover_url]"

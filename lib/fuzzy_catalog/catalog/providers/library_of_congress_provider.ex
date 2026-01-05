@@ -149,7 +149,8 @@ defmodule FuzzyCatalog.Catalog.Providers.LibraryOfCongressProvider do
       description: extract_description(mods_element),
       genre: extract_genre(mods_element),
       series: extract_series(mods_element),
-      suggested_media_types: []
+      suggested_media_types: [],
+      language: nil
     }
   end
 

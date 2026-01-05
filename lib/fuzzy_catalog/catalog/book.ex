@@ -32,6 +32,7 @@ defmodule FuzzyCatalog.Catalog.Book do
     field :series, :string
     field :series_number, :decimal
     field :original_title, :string
+    field :language, :string
 
     has_many :collection_items, FuzzyCatalog.Collections.CollectionItem
 
@@ -57,7 +58,8 @@ defmodule FuzzyCatalog.Catalog.Book do
       :description,
       :series,
       :series_number,
-      :original_title
+      :original_title,
+      :language
     ])
     |> validate_required([:title, :author])
     |> validate_length(:title, min: 1, max: 255)

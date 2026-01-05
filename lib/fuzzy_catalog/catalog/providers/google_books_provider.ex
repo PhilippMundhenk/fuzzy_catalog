@@ -140,7 +140,8 @@ defmodule FuzzyCatalog.Catalog.Providers.GoogleBooksProvider do
       description: volume_info["description"],
       series: extract_google_series(volume_info["seriesInfo"]),
       cover_url: get_in(volume_info, ["imageLinks", "thumbnail"]),
-      suggested_media_types: []
+      suggested_media_types: [],
+      language: nil
     }
   end
 
