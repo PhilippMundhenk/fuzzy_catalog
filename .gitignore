@@ -45,3 +45,5 @@ mise.local.toml
 /local.docs
 /test/integrations
 /k8s
+
+/.claude/settings.local.json
